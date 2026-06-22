@@ -1,0 +1,299 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import React, { useState } from "react";
+import { 
+  LayoutDashboard, 
+  UserCheck, 
+  Cpu, 
+  Trophy, 
+  Users, 
+  Target, 
+  FileSpreadsheet, 
+  Layers,
+  Sparkles,
+  PhoneCall,
+  Activity,
+  AlertCircle
+} from "lucide-react";
+import { motion, AnimatePresence } from "motion/react";
+
+// Import Views
+import DashboardView from "./components/DashboardView";
+import CoachingView from "./components/CoachingView";
+import AIAnaliticaView from "./components/AIAnaliticaView";
+import ProductivityView from "./components/ProductivityView";
+import CRMView from "./components/CRMView";
+import MetasView from "./components/MetasView";
+import ReportView from "./components/ReportView";
+import ArchitectureView from "./components/ArchitectureView";
+
+// Import Mock Seeds
+import {
+  initialKPIs,
+  initialDailySales,
+  initialMonthlySales,
+  initialProducts,
+  initialSellers,
+  initialCoachingSessions,
+  initialClients,
+  initialSmartGoals,
+  initialMedalhas,
+  initialHourlyHeatmap
+} from "./data/mockData";
+
+import { 
+  StoreKPIs, 
+  SellerPerformance, 
+  CoachingSession, 
+  CRMClient, 
+  SmartGoal 
+} from "./types";
+
+export default function App() {
+  const [activeTab, setActiveTab] = useState<string>("dashboard");
+
+  // Global Interactive States
+  const [kpis, setKpis] = useState<StoreKPIs>({
+    ...initialKPIs,
+    metaFaturamento: 190000 // Iniciar valor padrão
+  });
+  const [sellers, setSellers] = useState<SellerPerformance[]>(initialSellers);
+  const [coachingSessions, setCoachingSessions] = useState<CoachingSession[]>(initialCoachingSessions);
+  const [crmClients, setCrmClients] = useState<CRMClient[]>(initialClients);
+  const [smartGoals, setSmartGoals] = useState<SmartGoal[]>(initialSmartGoals);
+
+  // Manipuladores de Estado Interactivos (Garantem reatividade cruzada real entre abas)
+  
+  // 1. Conceder bônus de XP/Pontos do Painel de Produtividade à equipe
+  const handleAwardPoints = (sellerId: string, pts: number) => {
+    setSellers(prev => prev.map(s => {
+      if (s.id === sellerId) {
+        const newPoints = s.pontos + pts;
+        // Se subiu de milhar, incrementa nível
+        const currentLevel = s.nivel;
+        const calculatedLevel = Math.max(currentLevel, Math.floor(newPoints / 1000) + 1);
+        
+        return {
+          ...s,
+          pontos: newPoints,
+          nivel: calculatedLevel
+        };
+      }
+      return s;
+    }));
+  };
+
+  // 2. Adicionar nova avaliação de coaching e recalcular nível do vendedor
+  const handleAddCoachingSession = (newSession: CoachingSession) => {
+    setCoachingSessions(prev => [newSession, ...prev]);
+
+    // Atualizar dados de nível do respectivo vendedor na equipe
+    setSellers(prev => prev.map(s => {
+      if (s.id === newSession.vendedorId) {
+        return {
+          ...s,
+          nivel: newSession.nivelVendedor === "Black" ? 8 : newSession.nivelVendedor === "Diamante" ? 6 : newSession.nivelVendedor === "Ouro" ? 4 : 2
+        };
+      }
+      return s;
+    }));
+  };
+
+  // 3. Cadastrar novos contatos no CRM
+  const handleAddCRMClient = (newClient: CRMClient) => {
+    setCrmClients(prev => [newClient, ...prev]);
+  };
+
+  // 4. Mudar status de um cliente do Funil CRM e logar histórico
+  const handleUpdateCRMStatus = (clientId: string, newStatus: CRMClient["status"]) => {
+    setCrmClients(prev => prev.map(c => {
+      if (c.id === clientId) {
+        const timestamp = new Date().toLocaleDateString("pt-BR") + " " + new Date().toLocaleTimeString("pt-BR", { hour: '2-digit', minute: '2-digit' });
+        const textLog = `Mudou de status para [${newStatus}] por ação gerencial às ${timestamp}.`;
+        
+        // Recalcular bônus de conversão global ou individual se mudou para Fidelizado no ato
+        if (newStatus === "Fidelizado") {
+          setKpis(prevK => ({
+            ...prevK,
+            conversao: parseFloat((prevK.conversao + 0.4).toFixed(1)),
+            faturamentoMensal: prevK.faturamentoMensal + 1500,
+            lucroLiquido: prevK.lucroLiquido + 450
+          }));
+        }
+
+        return {
+          ...c,
+          status: newStatus,
+          historicoInteracoes: [textLog, ...c.historicoInteracoes],
+          comentariosStatus: `Acompanhamento prioritário de status atualizado.`
+        };
+      }
+      return c;
+    }));
+  };
+
+  // 5. Atualizar Metas Inteligentes recalculadas pela IA de Telecom coordenadora
+  const handleRecalculateGoals = (recalculatedGoals: SmartGoal[]) => {
+    setSmartGoals(recalculatedGoals);
+
+    // Dar feedback visual de faturamento elevado na meta coletiva
+    const faturamentoGoal = recalculatedGoals.find(g => g.id === "G_FAT_MENSAL");
+    if (faturamentoGoal) {
+      setKpis(prevK => ({
+        ...prevK,
+        metaFaturamento: faturamentoGoal.valorMeta
+      }));
+    }
+  };
+
+  // Renderizador condicional de abas
+  const renderContent = () => {
+    switch (activeTab) {
+      case "dashboard":
+        return (
+          <DashboardView 
+            kpis={kpis} 
+            sellers={sellers} 
+            products={initialProducts} 
+            dailySales={initialDailySales} 
+            monthlySales={initialMonthlySales}
+            hourlyData={initialHourlyHeatmap}
+          />
+        );
+      case "coaching":
+        return <CoachingView sellers={sellers} sessions={coachingSessions} onAddSession={handleAddCoachingSession} />;
+      case "ai":
+        return <AIAnaliticaView kpis={kpis} sellers={sellers} />;
+      case "productivity":
+        return <ProductivityView sellers={sellers} medalhas={initialMedalhas} onAwardPoints={handleAwardPoints} />;
+      case "crm":
+        return <CRMView clients={crmClients} onAddClient={handleAddCRMClient} onUpdateClientStatus={handleUpdateCRMStatus} />;
+      case "metas":
+        return <MetasView goals={smartGoals} sellers={sellers} onRecalculateGoals={handleRecalculateGoals} />;
+      case "report":
+        return <ReportView kpis={kpis} sellers={sellers} products={initialProducts} />;
+      case "architecture":
+        return <ArchitectureView />;
+      default:
+        return (
+          <DashboardView 
+            kpis={kpis} 
+            sellers={sellers} 
+            products={initialProducts} 
+            dailySales={initialDailySales} 
+            monthlySales={initialMonthlySales}
+            hourlyData={initialHourlyHeatmap}
+          />
+        );
+    }
+  };
+
+  // Array de itens de navegação
+  const navItems = [
+    { id: "dashboard", label: "Dashboard Executivo", icon: LayoutDashboard },
+    { id: "coaching", label: "Coaching de Vendas", icon: UserCheck },
+    { id: "ai", label: "IA Analítica", icon: Cpu, badge: "GEMINI" },
+    { id: "productivity", label: "Produtividade Arena", icon: Trophy },
+    { id: "crm", label: "CRM Integrado", icon: Users },
+    { id: "metas", label: "Metas Inteligentes", icon: Target },
+    { id: "report", label: "Dossiês & Relatórios", icon: FileSpreadsheet },
+    { id: "architecture", label: "Sugestões de Arquitetura", icon: Layers }
+  ];
+
+  return (
+    <div className="min-h-screen bg-[#0B0E14] text-[#E2E8F0] font-sans flex flex-col justify-between selection:bg-teal-500/30 selection:text-teal-200 transition-colors duration-200">
+      
+      {/* HEADER DE MARCA CORPORATIVO (Estilo Vivo Sênior - Tema Técnico) */}
+      <header className="bg-[#0F172A] text-[#E2E8F0] border-b border-[#1E293B] sticky top-0 z-50 px-4 md:px-8 py-4 flex items-center justify-between shadow-xs">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded bg-teal-500 flex items-center justify-center font-bold text-black shadow-[0_0_15px_rgba(45,212,191,0.3)]">
+            VX
+          </div>
+          <div>
+            <div className="flex items-center gap-1.5">
+              <h1 className="font-extrabold text-xs tracking-wider uppercase font-display">VIVO INTELLIGENCE HUB</h1>
+              <span className="hidden sm:inline bg-teal-500/10 text-teal-400 border border-teal-500/20 text-[9px] font-mono font-black px-1.5 py-0.5 rounded">AI ACTIVE</span>
+            </div>
+            <p className="text-[10px] text-slate-400 font-mono uppercase tracking-wide">Coaching, Produtividade & Alta Performance Comercial</p>
+          </div>
+        </div>
+
+        {/* Status Line Sutil Sem AI-Slop, Apenas Informações Úteis de Regional */}
+        <div className="flex items-center gap-4 text-xs font-medium text-slate-300">
+          <div className="hidden lg:flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-teal-400 shadow-[0_0_8px_#2dd4bf]" />
+            <span className="text-[10px] text-slate-400 uppercase tracking-wider font-extrabold font-mono">Canal: Varejo Consultivo Palladium SP</span>
+          </div>
+          
+          <div className="hidden md:block text-right">
+            <span className="text-[10px] text-teal-400 block font-semibold font-mono">META DE R$ {kpis.metaFaturamento.toLocaleString("pt-BR")}</span>
+            <span className="text-[9px] text-slate-500 font-mono">Progresso Geral: {Math.round((kpis.faturamentoMensal / kpis.metaFaturamento) * 100)}%</span>
+          </div>
+        </div>
+      </header>
+
+      {/* CORE WORKSPACE SECTIONS */}
+      <main className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 lg:p-8 space-y-6">
+        
+        {/* TAB NAVIGATION RAIL */}
+        <div className="flex items-center overflow-x-auto gap-1 border-b border-[#1E293B] pb-1 scrollbar-thin">
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = activeTab === item.id;
+            
+            return (
+              <button
+                key={item.id}
+                onClick={() => setActiveTab(item.id)}
+                className={`py-2.5 px-3 md:px-4 text-xs font-semibold rounded-t flex items-center gap-2 transition-all outline-none border-b-2 shrink-0 cursor-pointer ${
+                  isActive 
+                    ? "border-teal-500 bg-[#0F172A] text-teal-400 font-bold" 
+                    : "border-transparent text-slate-400 hover:text-[#E2E8F0] hover:bg-[#0F172A]/40"
+                }`}
+              >
+                <Icon className={`w-4 h-4 ${isActive ? "text-teal-400" : "text-slate-500"}`} />
+                <span className="font-display tracking-tight">{item.label}</span>
+                {item.badge && (
+                  <span className="bg-teal-500/10 text-teal-400 border border-teal-500/20 text-[8px] font-mono font-black px-1 rounded-sm uppercase tracking-wide">
+                    {item.badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* RENDER ACTIVE TAB WITH MOTION WRAPPER FADE */}
+        <div className="min-h-[480px]">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.18 }}
+            >
+              {renderContent()}
+            </motion.div>
+          </AnimatePresence>
+        </div>
+
+      </main>
+
+      {/* FOOTER DO SISTEMA */}
+      <footer className="bg-[#0F172A] text-slate-500 border-t border-[#1E293B] py-4 px-6 md:px-8 text-center text-[10px]">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-2">
+          <p>© 2026 Telecom Inteligência Comercial Sênior. Todos os direitos reservados. Inspirado nas metodologias sênior de Coaching da Vivo.</p>
+          <div className="flex gap-4">
+            <a href="#compliance" className="hover:text-teal-400 font-mono">Conformidade e Regulação LGPD</a>
+            <a href="#architecture" className="hover:text-teal-400 font-mono">Monitoria de SLAs</a>
+          </div>
+        </div>
+      </footer>
+
+    </div>
+  );
+}
